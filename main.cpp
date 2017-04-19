@@ -1,424 +1,231 @@
 #include <iostream>
 #include <stdio.h>
 #include <stdlib.h>
-#include <cmath>
-#include "stack_lib.h"
+#include <string.h>
+#include <assert.h>
 #include "commands_cpu.h"
 #define N 5000
+#define MAX_SIZE 5000
 
-class CPU
+class Asm
 {
 public:
-
-    CPU();
-    ~CPU();
-
-    void Launch();
-
-private:
-
-    void Push();
-    void Pop();
-    void Add();
-    void Sub();
-    void Mul();
-    void Div();
-    void Mod();
-    void Out();
-    void In();
-    void Ja();
-    void Jae();
-    void Jb();
-    void Jbe();
-    void Je();
-    void Jre();
-    void Jmp();
-    void Call();
-    void Ret();
-    void Dup();
-    void Push_();
-    void Pop_();
-    void Read_file();
-    void Shama();
-    void Copy_file_to_RAM(FILE * input);
-    void Dump_cpu();
-    void Dump_ram();
+    Asm();
+    ~Asm();
+    void Safe_labels();
+    void Write_file();
+    void Pop_asm();
 
 private:
-
-    int register_cpu[4];
-    int ram[N];
-    int ip;
-    Stack main_stack;
-    Stack secondary_stack;
-    size_t ram_size;
+    size_t labels_[MAX_SIZE];
+    bool label_map_[MAX_SIZE];
+    char comands_[MAX_SIZE];
+    size_t number_of_comand;
+    size_t place;
+    char buffer[MAX_SIZE];
+    FILE * input_;
+    FILE * output_;
+    inline bool Check_single_command(const char * current, int cmd_code, const char * cmd_word);
+    inline void Check_num_register(const char * current);
 };
 
 int main()
 {
-    CPU intel;
-    intel.Launch();
+    Asm my_asm;
+    my_asm.Safe_labels();
+    my_asm.Write_file();
+    printf("Successful assembly");
     return 0;
 }
 
-CPU::CPU():
-    ram_size(0),
-    ip(0)
+Asm::Asm():
+    place(0),
+    number_of_comand(0)
     {
-    }
-
-CPU::~CPU()
-{
-    ip = 0;
-}
-
-void CPU::Dump_ram()
-{
-    printf("\nDUMP_RAM_________________\n\n");
-    if(ram_size == 0)
-        printf("RAM is empty\n");
-    else
-    {
-        printf("ram_size : %d\n", ram_size);
-        for(int i = 0; i < ram_size; i++)
+        for(int i = 0; i < MAX_SIZE; i++)
         {
-            printf("ip:%d     val:%d\n", i, ram[i]);
+            label_map_[i] = 0;
         }
     }
-    printf("_________________________\n\n");
+
+Asm::~Asm()
+{
+    number_of_comand = 0;
+    fclose(input_);
+    fclose(output_);
 }
 
-void CPU::Dump_cpu()
+void Asm::Safe_labels()
 {
-    printf("MAIN");
-    main_stack.Dump();
-    printf("SECONDARY");
-    secondary_stack.Dump();
-    printf("\nDUMP_CPU_________________\n\n");
-    printf("Size of RAM = %d\n", ram_size);
-    printf("IP %d\n", ip);
-    printf("Register ax  =  %d\n", register_cpu[0]);
-    printf("Register bx  =  %d\n", register_cpu[1]);
-    printf("Register cx  =  %d\n", register_cpu[2]);
-    printf("Register dx  =  %d\n", register_cpu[3]);
-    printf("_________________________\n\n");
-}
-
-void CPU::Copy_file_to_RAM(FILE * input)
-{
-    int current = 0, i = 0, k = 0;
-    char num[10] = "";
-    while((current = fgetc(input)) != EOF)
+    input_ = fopen("C:\\Users\\User\\Desktop\\Codes\\ilab\\assembler\\input.txt", "r");
+    assert(input_ != NULL && "INPUT FILE DOES NOT EXIST");
+    int label, k = 0, length = 0, position = 0;
+    char arg[MAX_SIZE] = {};
+    while(fscanf(input_, "%s", arg) == 1)
     {
-        if(current != ' ')
+        length = strlen(arg);
+        if(!strcmp(arg, "ja") || !strcmp(arg, "jae") || !strcmp(arg, "jb") ||
+           !strcmp(arg, "jbe") || !strcmp(arg, "je") || !strcmp(arg, "jre") ||
+           !strcmp(arg, "jmp") || !strcmp(arg, "call"))
         {
-            num[k] = current;
-            k++;
+            position ++;
+            for(k = 0; k < length + 2; k++)
+            {
+                arg[k] = 0;
+            }
+            fscanf(input_, "%s", arg);
+
+            length = strlen(arg);
+            for(k = 0; k < length + 2; k++)
+            {
+                arg[k] = 0;
+            }
+            position ++;
+        }
+        else if(arg[length - 1] == ':')
+        {
+            label = atoi(arg);
+            labels_[label] = position;
+            label_map_[label] = 1;
+
+            for(k = 0; k < length + 2; k++)
+            {
+                arg[k] = 0;
+            }
         }
         else
         {
-            ram[i] = atoi(num);
-            for(int l = 0; l < k; l++)
-            {
-                num[l] = 0;
-            }
-            i++;
-            k = 0;
-            ram_size++;
+            position ++;
         }
     }
-    ram[i] = atoi(num);
-    ram_size++;
+    fclose(input_);
 }
 
-void CPU::Read_file()
+inline void Asm::Check_num_register(const char * current)
 {
-    FILE * input = fopen("C:\\Users\\User\\Desktop\\Codes\\ilab\\CPU\\comands.txt", "r");
-    assert(input != NULL && "INPUT FILE DOES NOT EXIST");
-    Copy_file_to_RAM(input);
-    fclose(input);
-}
-
-void CPU::Out()
-{
-    int num = 0;
-    num = main_stack.Pop();
-    printf("Top element of the stack: %d\n", num);
-}
-
-void CPU::In()
-{
-    int num = 0;
-    printf("Type the number from the keyboard: ");
-    scanf("%d", &num);
-    printf("\n");
-    main_stack.Push(num);
-}
-
-void CPU::Pop()
-{
-    main_stack.Pop();
-}
-
-void CPU::Add()
-{
-    int num1 = main_stack.Pop();
-    int num2 = main_stack.Pop();
-    main_stack.Push(num2 + num1);
-}
-
-void CPU::Sub()
-{
-    int num1 = main_stack.Pop();
-    int num2 = main_stack.Pop();
-    main_stack.Push(num2 - num1);
-}
-
-void CPU::Mul()
-{
-    int num1 = main_stack.Pop();
-    int num2 = main_stack.Pop();
-    printf("%d %d ==\n", num1, num2);
-    main_stack.Push(num2 * num1);
-}
-
-void CPU::Div()
-{
-    int num1 = main_stack.Pop();
-    int num2 = main_stack.Pop();
-    assert(num1 != 0 && "!!!DIVISION BY ZERO IS NOT ALLOWED!!!");
-    main_stack.Push(num2 / num1);
-}
-
-void CPU::Mod()
-{
-    int num1 = main_stack.Pop();
-    int num2 = main_stack.Pop();
-    assert(num1 != 0 && "!!!DIVISION BY ZERO IS NOT ALLOWED!!!");
-    main_stack.Push(num2 % num1);
-}
-
-void CPU::Ja()
-{
-    int num1 = main_stack.Pop();
-    int num2 = main_stack.Pop();
-    if(num1 > num2)
-    {
-        ip = ram[++ip] - 1;
-        assert(ip <= ram_size && "THE JUMP WENT BEYOND THE LIMITS OF RAM");
-    }
-    else
-    {
-        ip++;
-    }
-}
-
-void CPU::Jae()
-{
-    int num1 = main_stack.Pop();
-    int num2 = main_stack.Pop();
-    if(num1 >= num2)
-    {
-        ip = ram[++ip] - 1;
-        assert(ip <= ram_size && "THE JUMP WENT BEYOND THE LIMITS OF RAM");
-    }
-    else
-    {
-        ip++;
-    }
-}
-
-void CPU::Jmp()
-{
-    ip = ram[++ip] - 1;
-    assert(ip <= ram_size && "THE JUMP WENT BEYOND THE LIMITS OF RAM");
-}
-void CPU::Jb()
-{
-    int num1 = main_stack.Pop();
-    int num2 = main_stack.Pop();
-    if(num1 < num2)
-    {
-        ip = ram[++ip] - 1;
-        assert(ip <= ram_size && "THE JUMP WENT BEYOND THE LIMITS OF RAM");
-    }
-    else
-    {
-        ip ++;
-    }
-}
-
-void CPU::Jbe()
-{
-    int num1 = main_stack.Pop();
-    int num2 = main_stack.Pop();
-
-    if(num2 <= num1)
-    {
-        ip = ram[++ip] - 1;
-        assert(ip <= ram_size && "THE JUMP WENT BEYOND THE LIMITS OF RAM");
-    }
-    else
-    {
-        ip++;
-    }
-}
-
-void CPU::Je()
-{
-    int num1 = main_stack.Pop();
-    int num2 = main_stack.Pop();
-    if(num1 == num2)
-    {
-        ip = ram[++ip] - 1;
-        assert(ip <= ram_size && "THE JUMP WENT BEYOND THE LIMITS OF RAM");
-    }
-    else
-    {
-
-        ip++;
-    }
-}
-
-void CPU::Jre()
-{
-    int num1 = main_stack.Pop();
-    int num2 = main_stack.Pop();
-    if(num1 != num2)
-    {
-        ip = ram[++ip] - 1;
-        assert(ip <= ram_size && "THE JUMP WENT BEYOND THE LIMITS OF RAM");
-    }
-    else
-    {
-        ip++;
-    }
-}
-
-void CPU::Call()
-{
-    secondary_stack.Push(ip);
-    ip = ram[++ip] - 1;
-    assert(ip <= ram_size && "THE JUMP WENT BEYOND THE LIMITS OF RAM");
-}
-
-void CPU::Ret()
-{
-    ip = secondary_stack.Pop() + 1;
-}
-
-void CPU::Dup()
-{
-    int num = main_stack.Pop();
-    main_stack.Push(num);
-    main_stack.Push(num);
-}
-
-void CPU::Push()
-{
-    main_stack.Push(ram[++ip]);
-}
-
-void CPU::Push_()
-{
-     int val =  register_cpu[ram[++ip]];
-     main_stack.Push(val);
-}
-
-void CPU::Pop_()
-{
-    int val = main_stack.Pop();
-    register_cpu[ram[++ip]] = val;
-}
-
-void CPU::Shama()
-{
-    for(int i = 0; i < 25; i++)
-    {
-        printf("SHAMIL PETUH  .!.  SHAMIL PETUH  .!.  SHAMIL PETUH  .!.  SHAMIL PETUH  .!.  SHAMIL PETUH  .!.  SHAMIL PETUH\n");
-    }
-    printf("!!!HAHAHAHAH ZATROLIL LALKU!!!\n\n");
-    printf(";)\n\n");
-}
-
-void CPU::Launch()
-{
-    Read_file();
-    while(ram[ip] != 0)
-    {
-        switch(ram[ip])
+    size_t spaces = 0;
+    if(!strcmp(current, "ax"))
         {
-        case CMD_PUSH:
-            Push();
-            break;
-        case CMD_POP:
-            Pop();
-            break;
-        case CMD_ADD:
-            Add();
-            break;
-        case CMD_PUSH_:
-            Push_();
-            break;
-        case CMD_POP_:
-            Pop_();
-            break;
-        case CMD_SUB:
-            Sub();
-            break;
-        case CMD_MUL:
-            Mul();
-            break;
-        case CMD_DIV:
-            Div();
-            break;
-        case CMD_MOD:
-            Mod();
-            break;
-        case CMD_OUT:
-            Out();
-            break;
-        case CMD_IN:
-            In();
-            break;
-        case CMD_JA:
-            Ja();
-            break;
-        case CMD_JAE:
-            Jae();
-            break;
-        case CMD_JB:
-            Jb();
-            break;
-        case CMD_JBE:
-            Jbe();
-            break;
-        case CMD_JE:
-            Je();
-            break;
-        case CMD_JRE:
-            Jre();
-            break;
-        case CMD_JMP:
-            Jmp();
-            break;
-        case CMD_CALL:
-            Call();
-            break;
-        case CMD_RET:
-            Ret();
-            break;
-        case CMD_DUP:
-            Dup();
-            break;
-        case CMD_SHAMILV05:
-            Shama();
-            break;
-        default:
+            spaces = sprintf(buffer + place, "%d ", CMD_ax);
+        }
+    else if(!strcmp(current, "bx"))
+        {
+            spaces = sprintf(buffer + place, "%d ", CMD_bx);
+        }
+    else if(!strcmp(current, "cx"))
+        {
+            spaces = sprintf(buffer + place, "%d ", CMD_cx);
+        }
+    else if(!strcmp(current, "dx"))
+        {
+            spaces = sprintf(buffer + place, "%d ", CMD_dx);
+        }
+    else
+    {
+        assert(0 && "INVALID REGISTER");
+    }
+    place += spaces;
+}
+
+inline bool Asm::Check_single_command(const char * current, int cmd_code, const char * cmd_word)
+    {
+        size_t spaces = 0;
+        if(!strcmp(current, cmd_word))
+        {
+            spaces = sprintf(buffer + place, "%d ", cmd_code);
+            place += spaces;
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+}
+
+void Asm::Write_file()
+{
+    bool hlt_control = 0;
+    input_ = fopen("C:\\Users\\User\\Desktop\\Codes\\ilab\\assembler\\input.txt", "r");
+    assert(input_ != NULL && "INPUT FILE DOES NOT EXIST");
+    output_ = fopen("C:\\Users\\User\\Desktop\\Codes\\ilab\\CPU\\comands.txt", "w");
+    assert(output_ != NULL && "OUTPUT FILE DOES NOT EXIST");
+    int arg = 0;
+    char current[N] = {};
+    size_t spaces = 0;
+    while(fscanf(input_, "%s", current) == 1)
+    {
+        if(strchr(current, ':') != NULL)
+        {
+            spaces = 0;
+        }
+        else if(!strcmp(current, "push"))
+        {
+            spaces = sprintf(buffer + place, "%d ", CMD_PUSH);
+            place += spaces;
+
+            spaces = fscanf(input_, "%d", &arg);
+            assert(spaces != 0 && "MISSING OR INCORRECT ARGUMENT OF PUSH");
+            spaces = sprintf(buffer + place, "%d ", arg);
+            place += spaces;
+        }
+        else if(!strcmp(current, "push_"))
+        {
+            spaces = sprintf(buffer + place, "%d ", CMD_PUSH_);
+            place += spaces;
+            spaces = fscanf(input_, "%s", current);
+            Check_num_register(current);
+        }
+        else if(!strcmp(current, "pop_"))
+        {
+            spaces = sprintf(buffer + place, "%d ", CMD_POP_);
+            place += spaces;
+            spaces = fscanf(input_, "%s", current);
+            Check_num_register(current);
+        }
+
+        else if(Check_single_command(current, CMD_SHAMILV05, "secret"));
+        else if (Check_single_command(current, CMD_POP, "pop"));
+        else if (Check_single_command(current, CMD_ADD, "add"));
+        else if (Check_single_command(current, CMD_SUB, "sub"));
+        else if (Check_single_command(current, CMD_MUL, "mul"));
+        else if (Check_single_command(current, CMD_DIV, "div"));
+        else if (Check_single_command(current, CMD_OUT, "out"));
+        else if (Check_single_command(current, CMD_IN, "in"));
+        else if (Check_single_command(current, CMD_MOD, "mod"));
+        else if (Check_single_command(current, CMD_DUP, "dup"));
+        else if (Check_single_command(current, CMD_RET, "ret"));
+
+        else if(!strcmp(current, "ja") || !strcmp(current, "jae") || !strcmp(current, "jb") || !strcmp(current, "jbe") || !strcmp(current, "je") || !strcmp(current, "jre") || !strcmp(current, "jmp") || !strcmp(current, "call"))
+        {
+            if (Check_single_command(current, CMD_JA, "ja"));
+            else if (Check_single_command(current, CMD_JAE, "jae"));
+            else if (Check_single_command(current, CMD_JMP, "jmp"));
+            else if (Check_single_command(current, CMD_JB, "jb"));
+            else if (Check_single_command(current, CMD_JBE, "jbe"));
+            else if (Check_single_command(current, CMD_JE, "je"));
+            else if (Check_single_command(current, CMD_JRE, "jre"));
+            else if (Check_single_command(current, CMD_CALL, "call"));
+
+            spaces = fscanf(input_, "%d:", &arg);
+            assert(label_map_[arg] == 1 && "!!!THERE IS NO SUCH LABEL IN FILE!!!");
+            arg = labels_[arg];
+            spaces = sprintf(buffer + place, "%d ", arg);
+            place += spaces;
+        }
+        else if(!strcmp(current, "hlt"))
+        {
+            spaces = sprintf(buffer + place, "%d ", CMD_HLT);
+            place += spaces;
+            hlt_control = 1;
+        }
+        else
+        {
             assert(0 && "!!!INVALID COMMAND!!!");
         }
-    ip++;
     }
-    Dump_cpu();
-    printf("End of working");
+    if(buffer[place - spaces] != '0')
+    {
+        assert(hlt_control && "!!!MISSING HLT!!!");
+    }
+    fprintf(output_, "%s", buffer);
 }
